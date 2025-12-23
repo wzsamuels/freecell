@@ -5,29 +5,60 @@ import { useDroppable } from '@dnd-kit/core';
 import { Card as CardType, ColumnId } from '../types';
 import { Card } from './Card';
 import { Placeholder } from './Placeholder';
+import { isValidColumnMove, isValidStack } from '../utils/game-logic';
+import { clsx } from 'clsx';
 
 interface ColumnProps {
     id: ColumnId;
     cards: CardType[];
     onCardDoubleClick?: (card: CardType) => void;
+    activeCard?: CardType | null;
 }
 
-export const Column = ({ id, cards, onCardDoubleClick }: ColumnProps) => {
-    const { setNodeRef } = useDroppable({
+export const Column = ({ id, cards, onCardDoubleClick, activeCard }: ColumnProps) => {
+    const { setNodeRef, isOver } = useDroppable({
         id,
         data: { type: 'column', id },
     });
 
+    if (activeCard && isOver) {
+        console.log('Column Hover:', id, {
+            active: activeCard.id,
+            isOver,
+            topCard: cards[cards.length - 1]?.id,
+            validStack: isValidStack, // Just checking function exists
+        });
+    }
+
     const OVERLAP = 30; // pixels
 
+    // Find if the active card is in this column and get its index
+    const activeIndex = activeCard ? cards.findIndex(c => c.id === activeCard.id) : -1;
+
+    // Check if this column is a valid drop target for the active card
+    const topCard = cards.length > 0 ? cards[cards.length - 1] : undefined;
+    const isValidDrop = activeCard && isOver && activeIndex === -1 && isValidColumnMove(activeCard, topCard);
+
     return (
-        <div ref={setNodeRef} className="flex flex-col relative w-24 min-h-[400px]">
-            {cards.length === 0 && <Placeholder className="w-full h-36 bg-white/5 border-white/10" />}
+        <div
+            ref={setNodeRef}
+            className={clsx(
+                "flex flex-col relative w-24 min-h-[600px] pb-24 transition-colors rounded-xl",
+                isValidDrop && cards.length === 0 && "bg-emerald-900/40 ring-2 ring-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]"
+            )}
+        >
+            {cards.length === 0 && !isValidDrop && <Placeholder className="w-full h-36 bg-white/5 border-white/10" />}
 
             {cards.map((card, index) => {
-                const isLast = index === cards.length - 1;
-                // Basic rule: only last card is draggable for MVP
-                // Next level: check if card is part of a valid descending sequence
+                // Determine if this card is part of the stack being dragged
+                // If activeId is in this column, everything from that index onwards is hidden
+                const isDragging = activeIndex !== -1 && index >= activeIndex;
+
+                // A card is draggable if it and all cards below it form a valid stack
+                const remainingStack = cards.slice(index);
+                const isDraggable = isValidStack(remainingStack);
+
+                const isTopCard = index === cards.length - 1;
 
                 return (
                     <div
@@ -35,13 +66,18 @@ export const Column = ({ id, cards, onCardDoubleClick }: ColumnProps) => {
                         className="absolute left-0 w-24"
                         style={{
                             top: index * OVERLAP,
-                            zIndex: index
+                            zIndex: index,
+                            opacity: isDragging ? 0 : 1,
+                            pointerEvents: isDragging ? 'none' : 'auto'
                         }}
                     >
                         <Card
                             card={card}
-                            isDraggable={isLast}
-                            onDoubleClick={isLast && onCardDoubleClick ? () => onCardDoubleClick(card) : undefined}
+                            isDraggable={isDraggable}
+                            onDoubleClick={isDraggable && index === cards.length - 1 && onCardDoubleClick ? () => onCardDoubleClick(card) : undefined}
+                            className={clsx(
+                                isTopCard && isValidDrop && !isDragging && "ring-4 ring-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.5)] brightness-110"
+                            )}
                         />
                     </div>
                 );

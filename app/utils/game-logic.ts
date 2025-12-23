@@ -62,13 +62,21 @@ export const isValidColumnMove = (card: Card, targetCard: Card | undefined): boo
     if (!targetCard) return true;
 
     // Must be opposite color
-    if (card.color === targetCard.color) return false;
+    if (card.color === targetCard.color) {
+        console.log('ValidMove Fail: Color match', card.color, targetCard.color);
+        return false;
+    }
 
     // Must be one rank lower
     const cardVal = getRankValue(card.rank);
     const targetVal = getRankValue(targetCard.rank);
 
-    return targetVal === cardVal + 1;
+    console.log('ValidMove Check Ranks:', { cardVal, targetVal, cardRank: card.rank, targetRank: targetCard.rank });
+
+    const isRankValid = targetVal === cardVal + 1;
+    if (!isRankValid) console.log('ValidMove Fail: Rank mismatch');
+
+    return isRankValid;
 };
 
 export const isValidFoundationMove = (card: Card, foundationTop: Card | undefined): boolean => {
@@ -92,6 +100,35 @@ export const isValidFoundationMove = (card: Card, foundationTop: Card | undefine
 export const calculateMaxMovable = (emptyFreecells: number, emptyColumns: number): number => {
     return (1 + emptyFreecells) * Math.pow(2, emptyColumns);
 }
+
+export const isValidStack = (cards: Card[]): boolean => {
+    if (cards.length <= 1) return true;
+
+    for (let i = 0; i < cards.length - 1; i++) {
+        const current = cards[i];
+        const next = cards[i + 1];
+
+        // Must be opposite color
+        if (current.color === next.color) return false;
+
+        // Must be exactly one rank lower (current must be higher than next)
+        // e.g. 9 on 8 -> NO. current is TOP of stack (visually higher, index 0).
+        // Wait, 'cards' array usually goes from bottom-of-screen (index 0) to top-of-screen (index N).
+        // In this codebase, let's verify how columns are stored.
+        // GameBoard line 105: newState.columns[targetColId].push(card);
+        // So index 0 is at the top of the screen (base of column), index N is at the bottom (draggable card).
+
+        // If I pass a slice [Index X ... Index N], Index X is "higher" on the screen (larger rank), Index N is "lower" (smaller rank).
+        // So cards[i] should be Rank K, cards[i+1] should be Rank K-1.
+
+        const currentVal = getRankValue(current.rank);
+        const nextVal = getRankValue(next.rank);
+
+        if (currentVal !== nextVal + 1) return false;
+    }
+
+    return true;
+};
 
 export const attemptAutoMove = (card: Card, currentState: GameState): GameState | null => {
     const newState = JSON.parse(JSON.stringify(currentState)) as GameState;

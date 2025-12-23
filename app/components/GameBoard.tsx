@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, TouchSensor } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, TouchSensor, pointerWithin } from '@dnd-kit/core';
 import { snapCenterToCursor } from '@dnd-kit/modifiers';
 import { Card as CardType, ColumnId, FoundationId, FreecellId, GameState } from '../types';
 import { dealNewGame, isValidColumnMove, isValidFoundationMove } from '../utils/game-logic';
@@ -10,13 +10,25 @@ import { Freecell } from './Freecell';
 import { Foundation } from './Foundation';
 import { Card } from './Card';
 import { RotateCcw, Undo2, Timer } from 'lucide-react';
-import { attemptAutoMove } from '../utils/game-logic';
+import { attemptAutoMove, calculateMaxMovable } from '../utils/game-logic';
 
 export default function GameBoard() {
     const [gameState, setGameState] = useState<GameState | null>(null);
     const [history, setHistory] = useState<GameState[]>([]);
     const [activeCard, setActiveCard] = useState<CardType | null>(null);
     const [seconds, setSeconds] = useState(0);
+
+    // Calculate the actual stack being dragged for the overlay
+    const draggedStack = React.useMemo(() => {
+        if (!activeCard || !gameState) return [];
+        for (const col of Object.values(gameState.columns)) {
+            const index = col.findIndex(c => c.id === activeCard.id);
+            if (index !== -1) {
+                return col.slice(index);
+            }
+        }
+        return [activeCard];
+    }, [activeCard, gameState]);
 
     // Initialize game on client side to avoid hydration mismatch
     useEffect(() => {
@@ -52,32 +64,37 @@ export default function GameBoard() {
 
         if (!over) return;
 
-        const card = active.data.current as CardType;
-        // Find source (we could store this in drag start or search state)
+        const activeId = active.id;
 
-        // Find source container
+        // Find source container by searching current state
         let sourceContainer: 'columns' | 'freecells' | 'foundations' | null = null;
         let sourceKey: string = '';
+        let card: CardType | undefined;
 
         // Search columns
-        Object.entries(gameState.columns).forEach(([key, col]) => {
-            if (col.some(c => c.id === card.id)) {
+        for (const [key, col] of Object.entries(gameState.columns)) {
+            const found = col.find(c => c.id === activeId);
+            if (found) {
                 sourceContainer = 'columns';
                 sourceKey = key;
+                card = found;
+                break;
             }
-        });
+        }
 
         // Search freecells
         if (!sourceContainer) {
-            Object.entries(gameState.freecells).forEach(([key, cell]) => {
-                if (cell && cell.id === card.id) {
+            for (const [key, cell] of Object.entries(gameState.freecells)) {
+                if (cell && cell.id === activeId) {
                     sourceContainer = 'freecells';
                     sourceKey = key;
+                    card = cell;
+                    break;
                 }
-            });
+            }
         }
 
-        if (!sourceContainer) return;
+        if (!sourceContainer || !card) return;
 
         const targetData = over.data.current as any;
         const targetType = targetData?.type;
@@ -85,56 +102,110 @@ export default function GameBoard() {
 
         if (!targetType) return;
 
-        let newState = { ...gameState };
+        // Prepare new state helpers
+        // We do shallow copy of root objects, and specific arrays will be copied on write
+        const newColumns = { ...gameState.columns };
+        const newFreecells = { ...gameState.freecells };
+        const newFoundations = { ...gameState.foundations };
+
         let moved = false;
 
+        // Identify cards to move
+        let cardsToMove: CardType[] = [];
+
+        if (sourceContainer === 'columns') {
+            const colId = sourceKey as ColumnId;
+            const sourceCol = gameState.columns[colId];
+            const cardIndex = sourceCol.findIndex(c => c.id === card!.id);
+            if (cardIndex === -1) return;
+            cardsToMove = sourceCol.slice(cardIndex);
+        } else if (sourceContainer === 'freecells') {
+            cardsToMove = [card!];
+        } else {
+            // Foundation move logic (usually not allowed, but if valid)
+            cardsToMove = [card!]
+        }
+
+        // Execute Move Logic
         if (targetType === 'column') {
             const targetColId = targetId as ColumnId;
-            const targetColumn = newState.columns[targetColId];
+            // Use current state for validation target
+            const targetColumn = gameState.columns[targetColId];
             const targetCard = targetColumn.length > 0 ? targetColumn[targetColumn.length - 1] : undefined;
-            // In this simple version, we don't re-validate drag *start*, assuming UI only lets valid cards be dragged.
-            // But isValidColumnMove checks if card can land on target.
-            if (isValidColumnMove(card, targetCard)) {
-                if (sourceContainer === 'columns') {
-                    // Important: for MVP only moving TOP card. 
-                    // If moving stack, we need splice logic. assuming top card move:
-                    newState.columns[sourceKey as ColumnId].pop();
-                } else if (sourceContainer === 'freecells') {
-                    newState.freecells[sourceKey as FreecellId] = null;
+
+            if (isValidColumnMove(cardsToMove[0], targetCard)) {
+                // Capacity Check
+                const emptyFreecells = Object.values(gameState.freecells).filter(c => c === null).length;
+                const emptyColumns = Object.values(gameState.columns).filter(c => c.length === 0).length;
+
+                let effectiveEmptyColumns = emptyColumns;
+                if (targetColumn.length === 0) {
+                    // If target is empty, we don't count it as an "available empty column" for the calculation
+                    // because we are using it.
+                    effectiveEmptyColumns = Math.max(0, emptyColumns - 1);
                 }
-                newState.columns[targetColId].push(card);
-                moved = true;
+
+                const maxMovable = calculateMaxMovable(emptyFreecells, effectiveEmptyColumns);
+
+                if (cardsToMove.length <= maxMovable) {
+                    // Apply changes
+                    if (sourceContainer === 'columns') {
+                        const sourceColId = sourceKey as ColumnId;
+                        const srcCol = gameState.columns[sourceColId];
+                        const index = srcCol.findIndex(c => c.id === card!.id);
+                        newColumns[sourceColId] = srcCol.slice(0, index);
+                    } else if (sourceContainer === 'freecells') {
+                        newFreecells[sourceKey as FreecellId] = null;
+                    }
+
+                    // Spread into new array to avoid mutation
+                    newColumns[targetColId] = [...gameState.columns[targetColId], ...cardsToMove];
+                    moved = true;
+                }
             }
         } else if (targetType === 'freecell') {
             const targetFreecellId = targetId as FreecellId;
-            if (newState.freecells[targetFreecellId] === null) {
-                if (sourceContainer === 'columns') {
-                    newState.columns[sourceKey as ColumnId].pop();
-                } else if (sourceContainer === 'freecells') {
-                    newState.freecells[sourceKey as FreecellId] = null;
+            if (gameState.freecells[targetFreecellId] === null) {
+                if (cardsToMove.length === 1) {
+                    if (sourceContainer === 'columns') {
+                        const sourceColId = sourceKey as ColumnId;
+                        const srcCol = gameState.columns[sourceColId];
+                        const index = srcCol.findIndex(c => c.id === card!.id);
+                        newColumns[sourceColId] = srcCol.slice(0, index);
+                    } else if (sourceContainer === 'freecells') {
+                        newFreecells[sourceKey as FreecellId] = null;
+                    }
+                    newFreecells[targetFreecellId] = cardsToMove[0];
+                    moved = true;
                 }
-                newState.freecells[targetFreecellId] = card;
-                moved = true;
             }
         } else if (targetType === 'foundation') {
             const targetFoundationId = targetId as FoundationId;
-            const foundationCards = newState.foundations[targetFoundationId];
+            const foundationCards = gameState.foundations[targetFoundationId];
             const topFoundationCard = foundationCards.length > 0 ? foundationCards[foundationCards.length - 1] : undefined;
 
-            if (isValidFoundationMove(card, topFoundationCard)) {
+            if (cardsToMove.length === 1 && isValidFoundationMove(cardsToMove[0], topFoundationCard)) {
                 if (sourceContainer === 'columns') {
-                    newState.columns[sourceKey as ColumnId].pop();
+                    const sourceColId = sourceKey as ColumnId;
+                    const srcCol = gameState.columns[sourceColId];
+                    const index = srcCol.findIndex(c => c.id === card!.id);
+                    newColumns[sourceColId] = srcCol.slice(0, index);
                 } else if (sourceContainer === 'freecells') {
-                    newState.freecells[sourceKey as FreecellId] = null;
+                    newFreecells[sourceKey as FreecellId] = null;
                 }
-                newState.foundations[targetFoundationId].push(card);
+                newFoundations[targetFoundationId] = [...foundationCards, cardsToMove[0]];
                 moved = true;
             }
         }
 
         if (moved) {
             setHistory(prev => [...prev, gameState]);
-            setGameState(newState);
+            setGameState({
+                ...gameState,
+                columns: newColumns,
+                freecells: newFreecells,
+                foundations: newFoundations
+            });
         }
     };
 
@@ -163,6 +234,7 @@ export default function GameBoard() {
     return (
         <DndContext
             sensors={sensors}
+            collisionDetection={pointerWithin}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             modifiers={[snapCenterToCursor]}
@@ -220,6 +292,7 @@ export default function GameBoard() {
                             id={id as ColumnId}
                             cards={cards}
                             onCardDoubleClick={handleDoubleClick}
+                            activeCard={activeCard}
                         />
                     ))}
                 </div>
@@ -227,7 +300,20 @@ export default function GameBoard() {
             </div>
 
             <DragOverlay dropAnimation={null} zIndex={100}>
-                {activeCard ? <Card card={activeCard} isDraggable={false} className="cursor-grabbing shadow-2xl scale-105 rotate-2" /> : null}
+                {draggedStack.length > 0 ? (
+                    <div className="relative">
+                        {draggedStack.map((card, i) => (
+                            <div key={card.id} style={{
+                                position: 'absolute',
+                                top: i * 30, // Must match Column overlap
+                                left: 0,
+                                zIndex: i
+                            }}>
+                                <Card card={card} isDraggable={false} className="cursor-grabbing shadow-2xl scale-105" />
+                            </div>
+                        ))}
+                    </div>
+                ) : null}
             </DragOverlay>
         </DndContext>
     );
