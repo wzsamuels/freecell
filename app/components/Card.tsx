@@ -57,7 +57,6 @@ export const Card = ({ card, isDraggable = true, style, className, onClick, onDo
                     'flex flex-col justify-between p-0.5 sm:p-1.5 lg:p-2',
                     'transition-shadow hover:shadow-lg',
                     isDragging ? 'z-50 shadow-2xl scale-110 opacity-90' : 'z-auto',
-                    'touch-none', // Prevent browser scrolling while dragging
                     className
                 )
             )}

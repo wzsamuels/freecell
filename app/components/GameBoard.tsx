@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, TouchSensor, pointerWithin } from '@dnd-kit/core';
 import { snapCenterToCursor } from '@dnd-kit/modifiers';
 import { Card as CardType, ColumnId, FoundationId, FreecellId, GameState } from '../types';
 import { dealNewGame, isValidColumnMove, isValidFoundationMove } from '../utils/game-logic';
@@ -48,15 +48,8 @@ export default function GameBoard() {
     };
 
     const sensors = useSensors(
-        useSensor(MouseSensor, {
-            activationConstraint: { distance: 10 }
-        }),
-        useSensor(TouchSensor, {
-            activationConstraint: {
-                delay: 250,
-                tolerance: 5,
-            },
-        })
+        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+        useSensor(TouchSensor) // Good for mobile
     );
 
     if (!gameState) return <div className="text-white">Loading...</div>;
@@ -247,63 +240,60 @@ export default function GameBoard() {
             modifiers={[snapCenterToCursor]}
         >
             <div
-                className="flex flex-col gap-4 w-full max-w-7xl mx-auto p-2 sm:p-4 select-none [--card-overlap:22px] sm:[--card-overlap:30px] lg:[--card-overlap:45px]"
+                className="flex flex-col gap-2 sm:gap-4 w-full max-w-7xl mx-auto p-1 sm:p-4 select-none [--card-overlap:22px] sm:[--card-overlap:30px] lg:[--card-overlap:45px]"
             >
+                {/* Top Control Bar */}
+                <div className="flex flex-row items-center justify-between w-full bg-black/30 backdrop-blur-md p-2 rounded-lg border border-white/10 shadow-lg">
+                    <h1 className="text-emerald-100 text-lg sm:text-xl font-black font-serif tracking-widest uppercase ml-2">Freecell</h1>
 
-                {/* Header Section: Compact on mobile */}
-                <div className="flex flex-col gap-4">
-                    {/* Top Row: Freecells and Foundations (side by side on mobile if possible) */}
-                    <div className="flex flex-row justify-between items-start gap-2 sm:gap-4 overflow-x-auto pb-2 sm:pb-0">
-                        <div className="flex gap-1 sm:gap-2">
-                            {Object.entries(gameState.freecells).map(([id, card]) => (
-                                <Freecell
-                                    key={id}
-                                    id={id as FreecellId}
-                                    card={card}
-                                    onCardDoubleClick={handleDoubleClick}
-                                />
-                            ))}
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <button
+                            onClick={handleUndo}
+                            disabled={history.length === 0}
+                            className="flex items-center gap-1 sm:gap-2 px-3 py-1.5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs sm:text-sm rounded-md transition-colors"
+                            title="Undo"
+                        >
+                            <Undo2 size={18} />
+                            <span className="hidden sm:inline">Undo</span>
+                        </button>
+
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-black/40 text-emerald-100 rounded-md font-mono text-sm min-w-[60px] justify-center">
+                            <Timer size={14} className="opacity-70" />
+                            {formatTime(seconds)}
                         </div>
 
-                        {/* On large screens, title/timer could be in center, but for mobile we push foundations to right */}
-                        <div className="flex gap-1 sm:gap-2">
-                            {Object.entries(gameState.foundations).map(([id, cards]) => (
-                                <Foundation key={id} id={id as FoundationId} cards={cards} />
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Controls Row */}
-                    <div className="flex flex-row items-center justify-between sm:justify-center gap-4 bg-black/20 p-2 rounded-lg">
-                        <h1 className="text-emerald-100/50 text-xl sm:text-2xl font-black font-serif tracking-widest uppercase hidden sm:block">Freecell</h1>
-
-                        <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-center">
-                            <button
-                                onClick={handleUndo}
-                                disabled={history.length === 0}
-                                className="flex items-center gap-1 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm sm:text-base rounded-full font-semibold transition-colors backdrop-blur-sm"
-                            >
-                                <Undo2 size={16} className="sm:w-5 sm:h-5" />
-                                Undo
-                            </button>
-
-                            <div className="flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-black/20 text-emerald-100 rounded-full font-mono text-sm sm:text-lg min-w-[80px] sm:min-w-[100px] justify-center">
-                                <Timer size={14} className="opacity-70 sm:w-5 sm:h-5" />
-                                {formatTime(seconds)}
-                            </div>
-
-                            <button
-                                onClick={resetGame}
-                                className="flex items-center gap-1 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 bg-emerald-800/50 hover:bg-emerald-700 text-white text-sm sm:text-base rounded-full font-bold shadow-lg transition-all backdrop-blur border border-white/10 active:scale-95"
-                            >
-                                <RotateCcw size={16} className="sm:w-5 sm:h-5" />
-                                New
-                            </button>
-                        </div>
+                        <button
+                            onClick={resetGame}
+                            className="flex items-center gap-1 sm:gap-2 px-3 py-1.5 bg-emerald-700/80 hover:bg-emerald-600 text-white text-xs sm:text-sm rounded-md font-bold shadow-sm transition-all active:scale-95"
+                            title="New Game"
+                        >
+                            <RotateCcw size={18} />
+                            <span className="hidden sm:inline">New</span>
+                        </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-8 gap-1 sm:gap-4 lg:gap-8 min-h-[60vh] p-2 sm:p-6 rounded-2xl sm:rounded-3xl bg-black/10 shadow-inner border border-white/5">
+                {/* Game Zones: Freecells and Foundations */}
+                <div className="flex flex-row justify-between items-start gap-2 sm:gap-4 overflow-x-auto pb-1 sm:pb-0 px-1">
+                    <div className="flex gap-1 sm:gap-2 bg-black/10 p-1 sm:p-2 rounded-lg border border-white/5">
+                        {Object.entries(gameState.freecells).map(([id, card]) => (
+                            <Freecell
+                                key={id}
+                                id={id as FreecellId}
+                                card={card}
+                                onCardDoubleClick={handleDoubleClick}
+                            />
+                        ))}
+                    </div>
+
+                    <div className="flex gap-1 sm:gap-2 bg-black/10 p-1 sm:p-2 rounded-lg border border-white/5">
+                        {Object.entries(gameState.foundations).map(([id, cards]) => (
+                            <Foundation key={id} id={id as FoundationId} cards={cards} />
+                        ))}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-8 gap-0.5 sm:gap-4 lg:gap-8 min-h-[60vh] sm:min-h-[600px] p-1 sm:p-6 rounded-xl sm:rounded-3xl bg-black/10 shadow-inner border border-white/5">
                     {Object.entries(gameState.columns).map(([id, cards]) => (
                         <Column
                             key={id}
