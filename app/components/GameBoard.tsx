@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, TouchSensor, pointerWithin } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, MouseSensor, TouchSensor, pointerWithin } from '@dnd-kit/core';
 import { snapCenterToCursor } from '@dnd-kit/modifiers';
 import { Card as CardType, ColumnId, FoundationId, FreecellId, GameState } from '../types';
 import { dealNewGame, isValidColumnMove, isValidFoundationMove } from '../utils/game-logic';
@@ -48,8 +48,15 @@ export default function GameBoard() {
     };
 
     const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-        useSensor(TouchSensor) // Good for mobile
+        useSensor(MouseSensor, {
+            activationConstraint: { distance: 10 }
+        }),
+        useSensor(TouchSensor, {
+            activationConstraint: {
+                delay: 250,
+                tolerance: 5,
+            },
+        })
     );
 
     if (!gameState) return <div className="text-white">Loading...</div>;
@@ -240,8 +247,7 @@ export default function GameBoard() {
             modifiers={[snapCenterToCursor]}
         >
             <div
-                className="flex flex-col gap-4 w-full max-w-7xl mx-auto p-2 sm:p-4 select-none"
-                style={{ ['--card-overlap' as any]: '25px' } as React.CSSProperties}
+                className="flex flex-col gap-4 w-full max-w-7xl mx-auto p-2 sm:p-4 select-none [--card-overlap:22px] sm:[--card-overlap:30px] lg:[--card-overlap:45px]"
             >
 
                 {/* Header Section: Compact on mobile */}
@@ -313,11 +319,11 @@ export default function GameBoard() {
 
             <DragOverlay dropAnimation={null} zIndex={100}>
                 {draggedStack.length > 0 ? (
-                    <div className="relative">
+                    <div className="relative [--card-overlap:22px] sm:[--card-overlap:30px] lg:[--card-overlap:45px]">
                         {draggedStack.map((card, i) => (
                             <div key={card.id} style={{
                                 position: 'absolute',
-                                top: i * 25, // Matches the implicit fallback in Column
+                                top: `calc(${i} * var(--card-overlap))`,
                                 left: 0,
                                 zIndex: i
                             }}>
