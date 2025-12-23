@@ -42,12 +42,18 @@ export const Column = ({ id, cards, onCardDoubleClick, activeCard }: ColumnProps
     return (
         <div
             ref={setNodeRef}
-            className={clsx(
-                "flex flex-col relative w-24 min-h-[600px] pb-24 transition-colors rounded-xl",
-                isValidDrop && cards.length === 0 && "bg-emerald-900/40 ring-2 ring-emerald-400/50 shadow-[0_0_15px_rgba(52,211,153,0.3)]"
-            )}
+            className="flex flex-col relative w-10 sm:w-16 lg:w-24 min-h-[400px] sm:min-h-[500px] lg:min-h-[600px] pb-12 sm:pb-24 transition-colors rounded-xl"
         >
-            {cards.length === 0 && !isValidDrop && <Placeholder className="w-full h-36 bg-white/5 border-white/10" />}
+            {cards.length === 0 && (
+                <Placeholder
+                    className={clsx(
+                        "w-full h-16 sm:h-24 lg:h-36 transition-all duration-200",
+                        isValidDrop
+                            ? "bg-emerald-900/40 ring-4 ring-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.5)] border-transparent"
+                            : "bg-white/5 border-white/10"
+                    )}
+                />
+            )}
 
             {cards.map((card, index) => {
                 // Determine if this card is part of the stack being dragged
@@ -63,9 +69,12 @@ export const Column = ({ id, cards, onCardDoubleClick, activeCard }: ColumnProps
                 return (
                     <div
                         key={card.id}
-                        className="absolute left-0 w-24"
+                        className="absolute left-0 w-full transition-[top]"
                         style={{
-                            top: index * OVERLAP,
+                            // Fixed values for now: 22px mobile, 30px bigger
+                            // Using CSS var calc would receive var(--card-overlap) if we set it on container
+                            // For now, let's use a safe implicit logic: 22px is safe for all
+                            top: `calc(${index} * var(--card-overlap, 25px))`,
                             zIndex: index,
                             opacity: isDragging ? 0 : 1,
                             pointerEvents: isDragging ? 'none' : 'auto'

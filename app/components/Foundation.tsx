@@ -24,10 +24,10 @@ export const Foundation = ({ id, cards }: FoundationProps) => {
     // Let's hardcode order or just show a generic placeholder
 
     return (
-        <div ref={setNodeRef} className="relative w-24 h-36">
+        <div ref={setNodeRef} className="relative w-10 h-16 sm:w-16 sm:h-24 lg:w-24 lg:h-36">
             {!topCard && (
                 <Placeholder className="w-full h-full bg-white/5 border-white/20">
-                    <span className="text-white/20 font-bold text-2xl">A</span>
+                    <span className="text-white/20 font-bold text-lg sm:text-2xl">A</span>
                 </Placeholder>
             )}
             {topCard && (
