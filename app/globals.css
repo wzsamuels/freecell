@@ -2,15 +2,17 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #ffffff;
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
+  background: radial-gradient(circle at center, #064e3b, #022c22, #042f2e);
   font-family: Arial, Helvetica, sans-serif;
+  height: 100vh;
+  width: 100vw;
   overflow: hidden;
-  /* Prevent scrolling when dragging */
+  position: fixed;
 }
 
 @layer utilities {
