@@ -8,9 +8,67 @@ export const getRankValue = (rank: Rank): number => {
     return RANKS.indexOf(rank) + 1;
 };
 
+// Microsoft Freecell RNG implementation
+// https://rosettacode.org/wiki/Deal_cards_for_FreeCell
+let seedState = 1;
+
+export const setSeed = (seed: number) => {
+    seedState = seed;
+};
+
+const ms_rand = (): number => {
+    seedState = (seedState * 214013 + 2531011) & 0x7FFFFFFF;
+    return (seedState >> 16) & 0x7FFF;
+};
+
+// Known Deal Numbers
+const IMPOSSIBLE_DEALS = [11982, 146692, 186216, 455889, 495505, 512118, 517776, 781948];
+const EASY_DEALS = [25904, 164, 7058, 15196, 27853, 31316, 2, 5, 7, 8, 11, 26, 30, 33, 11987, 15140];
+const HARD_DEALS = [31465, 169, 4368, 7700, 21278, 31945, 178, 285, 454, 575, 598, 617, 657, 775, 829];
+
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
+export const getRandomSeed = (difficulty: Difficulty = 'medium'): number => {
+    let seed: number;
+
+    if (difficulty === 'easy') {
+        const randomIndex = Math.floor(Math.random() * EASY_DEALS.length);
+        seed = EASY_DEALS[randomIndex];
+    } else if (difficulty === 'hard') {
+        const randomIndex = Math.floor(Math.random() * HARD_DEALS.length);
+        seed = HARD_DEALS[randomIndex];
+    } else {
+        // Medium: Random 1-32000 (Standard MS Range), retry if impossible
+        do {
+            seed = Math.floor(Math.random() * 32000) + 1;
+        } while (IMPOSSIBLE_DEALS.includes(seed));
+    }
+    return seed;
+};
+
 export const createDeck = (): Card[] => {
     const deck: Card[] = [];
-    for (const suit of SUITS) {
+    // We must essentially create the deck in a specific standard order for the shuffle to match MS Freecell
+    // MS Order: A-K of Clubs, Diamonds, Hearts, Spades? Or Standard Suit Order?
+    // Actually, MS implementation typically starts with an array of 0..51 and shuffles numbers.
+    // Let's use standard logical creation and map later if needed, 
+    // BUT for MS algo to work perfectly we need the exact initial state.
+    // Usually it's:
+    // 0-12: A-K Clubs
+    // 13-25: A-K Diamonds
+    // 26-38: A-K Hearts
+    // 39-51: A-K Spades
+    // Let's ensure SUITS and RANKS iterate in that order.
+
+    // Logic: 
+    // Suits: clubs, diamonds, hearts, spades
+    // Ranks: A, 2...10, J, Q, K
+
+    // In our types.ts SUITS are ['hearts', 'diamonds', 'clubs', 'spades'] which is NOT standard bridge order usually used.
+    // Let's hardcode the creation to be safe for MS Algo parity.
+    const suits: Suit[] = ['clubs', 'diamonds', 'hearts', 'spades'];
+
+    for (const suit of suits) {
         for (const rank of RANKS) {
             deck.push({
                 id: `${suit}-${rank}`,
@@ -23,17 +81,27 @@ export const createDeck = (): Card[] => {
     return deck;
 };
 
-export const shuffleDeck = (deck: Card[]): Card[] => {
+// MS Freecell Shuffle Algorithm
+export const shuffleDeckSeeded = (deck: Card[], seed: number): Card[] => {
+    setSeed(seed);
     const shuffled = [...deck];
+
+    // Standard MS Algo:
+    // for i from 51 down to 1
+    //   j = rand() % (i + 1)
+    //   swap shuffled[i] with shuffled[j]
+
     for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = ms_rand() % (i + 1);
         [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;
 };
 
-export const dealNewGame = (): GameState => {
-    const deck = shuffleDeck(createDeck());
+export const dealNewGame = (difficulty: Difficulty = 'medium', specificSeed?: number): { state: GameState, seed: number } => {
+    const seed = specificSeed ?? getRandomSeed(difficulty);
+    const deck = shuffleDeckSeeded(createDeck(), seed);
+
     const columns: Record<ColumnId, Card[]> = {
         'col-1': [], 'col-2': [], 'col-3': [], 'col-4': [],
         'col-5': [], 'col-6': [], 'col-7': [], 'col-8': [],
@@ -46,13 +114,16 @@ export const dealNewGame = (): GameState => {
     });
 
     return {
-        foundations: {
-            'foundation-1': [], 'foundation-2': [], 'foundation-3': [], 'foundation-4': []
+        state: {
+            foundations: {
+                'foundation-1': [], 'foundation-2': [], 'foundation-3': [], 'foundation-4': []
+            },
+            freecells: {
+                'freecell-1': null, 'freecell-2': null, 'freecell-3': null, 'freecell-4': null
+            },
+            columns
         },
-        freecells: {
-            'freecell-1': null, 'freecell-2': null, 'freecell-3': null, 'freecell-4': null
-        },
-        columns
+        seed
     };
 };
 

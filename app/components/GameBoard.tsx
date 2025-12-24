@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, TouchSensor, pointerWithin } from '@dnd-kit/core';
 import { snapCenterToCursor } from '@dnd-kit/modifiers';
 import { Card as CardType, ColumnId, FoundationId, FreecellId, GameState } from '../types';
-import { dealNewGame, isValidColumnMove, isValidFoundationMove } from '../utils/game-logic';
+import { dealNewGame, isValidColumnMove, isValidFoundationMove, Difficulty } from '../utils/game-logic';
 import { Column } from './Column';
 import { Freecell } from './Freecell';
 import { Foundation } from './Foundation';
@@ -17,6 +17,10 @@ export default function GameBoard() {
     const [history, setHistory] = useState<GameState[]>([]);
     const [activeCard, setActiveCard] = useState<CardType | null>(null);
     const [seconds, setSeconds] = useState(0);
+
+    // Difficulty State
+    const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty>('medium');
+    const [currentSeed, setCurrentSeed] = useState<number>(0);
 
     // Calculate the actual stack being dragged for the overlay
     const draggedStack = React.useMemo(() => {
@@ -32,7 +36,9 @@ export default function GameBoard() {
 
     // Initialize game on client side to avoid hydration mismatch
     useEffect(() => {
-        setGameState(dealNewGame());
+        const { state, seed } = dealNewGame('medium');
+        setGameState(state);
+        setCurrentSeed(seed);
     }, []);
 
     useEffect(() => {
@@ -226,7 +232,9 @@ export default function GameBoard() {
     };
 
     const resetGame = () => {
-        setGameState(dealNewGame());
+        const { state, seed } = dealNewGame(currentDifficulty);
+        setGameState(state);
+        setCurrentSeed(seed);
         setHistory([]);
         setSeconds(0);
     };
@@ -244,7 +252,31 @@ export default function GameBoard() {
             >
                 {/* Top Control Bar */}
                 <div className="flex flex-row items-center justify-between w-full bg-black/30 backdrop-blur-md p-2 rounded-lg border border-white/10 shadow-lg">
-                    <h1 className="text-emerald-100 text-lg sm:text-xl font-black font-serif tracking-widest uppercase ml-2">Freecell</h1>
+                    <div className="flex items-center gap-2 sm:gap-4">
+                        <h1 className="text-emerald-100 text-lg sm:text-xl font-black font-serif tracking-widest uppercase ml-2 hidden sm:block">Freecell</h1>
+
+                        <select
+                            value={currentDifficulty}
+                            onChange={(e) => {
+                                const newDiff = e.target.value as Difficulty;
+                                setCurrentDifficulty(newDiff);
+                                const { state, seed } = dealNewGame(newDiff);
+                                setGameState(state);
+                                setCurrentSeed(seed);
+                                setHistory([]);
+                                setSeconds(0);
+                            }}
+                            className="bg-black/40 text-emerald-100 text-xs sm:text-sm rounded border border-white/10 px-2 py-1 outline-none focus:border-emerald-500"
+                        >
+                            <option value="easy">Easy</option>
+                            <option value="medium">Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+
+                        <div className="text-emerald-100/50 text-xs font-mono hidden lg:block">
+                            #{currentSeed}
+                        </div>
+                    </div>
 
                     <div className="flex items-center gap-2 sm:gap-4">
                         <button
